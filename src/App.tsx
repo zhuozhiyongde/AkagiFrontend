@@ -181,7 +181,9 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
     const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
-    const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:3001');
+    const [backendUrl, setBackendUrl] = useState(
+        () => localStorage.getItem('backendUrl') || 'https://ms.arthals.ink'
+    );
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
 
     useEffect(() => {
@@ -205,6 +207,10 @@ function App() {
         mediaQuery.addEventListener('change', handleChange);
         return () => mediaQuery.removeEventListener('change', handleChange);
     }, [theme]);
+
+    useEffect(() => {
+        localStorage.setItem('backendUrl', backendUrl);
+    }, [backendUrl]);
 
     // Effect to fetch data periodically
     useEffect(() => {
