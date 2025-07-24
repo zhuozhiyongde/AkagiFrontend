@@ -28,6 +28,7 @@ if (mode === 'mock') {
 
 const server = Bun.serve({
     port: 3001,
+    hostname: "0.0.0.0",
     async fetch(req) {
         const url = new URL(req.url);
 
@@ -67,7 +68,7 @@ const server = Bun.serve({
     },
 });
 
-console.log(`Server listening on localhost:${server.port} in ${mode} mode`);
+console.log(`Server listening on 0.0.0.0:${server.port} in ${mode} mode`);
 
 function generateMockData(): RecommendationData {
     const tiles = ["1m", "2m", "3m", "4m", "5m", "5mr", "6m", "7m", "8m", "9m", "1p", "2p", "3p", "4p", "5p", "5pr", "6p", "7p", "8p", "9p", "1s", "2s", "3s", "4s", "5s", "5sr", "6s", "7s", "8s", "9s", "E", "S", "W", "N", "P", "F", "C"];
