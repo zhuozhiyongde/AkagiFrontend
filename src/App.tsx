@@ -181,7 +181,7 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
     const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
-    const [backendUrl, setBackendUrl] = useState('ws://192.168.31.125:3001');
+    const [backendUrl, setBackendUrl] = useState('http://127.0.0.1:3001');
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
 
     useEffect(() => {
@@ -206,26 +206,30 @@ function App() {
         return () => mediaQuery.removeEventListener('change', handleChange);
     }, [theme]);
 
-    // Effect to connect to WebSocket and receive data
+    // Effect to fetch data periodically
     useEffect(() => {
-        const ws = new WebSocket(backendUrl);
-
-        ws.onopen = () => console.log(`Connected to mock server at ${backendUrl}`);
-        ws.onclose = () => console.log('Disconnected from mock server');
-
-        ws.onmessage = (event) => {
+        const fetchData = async () => {
+            if (!backendUrl) return;
             try {
-                const message = JSON.parse(event.data);
-                if (message.type === 'recommandations' && message.data) {
-                    setFullRecData(message.data);
+                const response = await fetch(`${backendUrl}/recommendations`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data) { // The server might return null initially
+                    setFullRecData(data.data);
                 }
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
+                console.error("Failed to fetch recommendations:", error);
+                setFullRecData(null); // Clear data on error
             }
         };
 
-        return () => ws.close();
-    }, [backendUrl, theme]);
+        fetchData(); // Fetch immediately on component mount
+        const intervalId = setInterval(fetchData, 2000); // Poll every 2 seconds
+
+        return () => clearInterval(intervalId); // Cleanup on component unmount
+    }, [backendUrl]);
 
     return (
         <div className="p-4 sm:p-8 bg-zinc-100 dark:bg-black text-black dark:text-white flex flex-col min-h-[100svh]">
@@ -265,7 +269,7 @@ function App() {
                         id="backendUrl"
                         value={backendUrl}
                         onChange={(e) => setBackendUrl(e.target.value)}
-                        placeholder="ws://..."
+                        placeholder="http://..."
                     />
                 </div>
 

@@ -17,60 +17,53 @@ let latestRecommendation: RecommendationData | null = null;
 
 const mode = process.argv.includes('mock') ? 'mock' : 'serve';
 
+if (mode === 'mock') {
+    // Generate initial data
+    latestRecommendation = generateMockData();
+    setInterval(() => {
+        latestRecommendation = generateMockData();
+        console.log('Generated new mock data');
+    }, 5000);
+}
+
 const server = Bun.serve({
     port: 3001,
     async fetch(req) {
         const url = new URL(req.url);
+
+        const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        };
+
+        if (req.method === "OPTIONS") {
+            return new Response(null, { headers: corsHeaders });
+        }
+
         if (url.pathname === '/update' && req.method === 'POST') {
             try {
                 const body = await req.json();
                 console.log('Received data from Python:', JSON.stringify(body, null, 2));
                 latestRecommendation = body; // Store the latest recommendation
-                
-                // Broadcast to all connected WebSocket clients
-                server.publish("recommendations", JSON.stringify(latestRecommendation));
-
-                return new Response('Data received', { status: 200 });
+                return new Response('Data received', { status: 200, headers: corsHeaders });
             } catch (error) {
                 console.error('Error processing POST request:', error);
-                return new Response('Invalid JSON', { status: 400 });
+                return new Response('Invalid JSON', { status: 400, headers: corsHeaders });
             }
         }
 
-        // upgrade the request to a WebSocket
-        if (server.upgrade(req, { data: { topic: "recommendations" } })) {
-            return; // Bun automatically handles the response for upgrades
+        if (url.pathname === '/recommendations' && req.method === 'GET') {
+            return new Response(JSON.stringify(latestRecommendation), {
+                headers: {
+                    ...corsHeaders,
+                    "Content-Type": "application/json"
+                },
+                status: 200
+            });
         }
-        return new Response('Upgrade failed :(', { status: 500 });
-    },
-    websocket: {
-        open(ws) {
-            console.log(`Client connected in ${mode} mode`);
-            ws.subscribe("recommendations");
-            
-            if (mode === 'mock') {
-                // In mock mode, send initial data and then push new data every 3 seconds
-                ws.send(JSON.stringify(generateMockData()));
-                ws.data = setInterval(() => {
-                    // In mock mode, we can publish to all clients or send to one, publishing is better
-                    server.publish("recommendations", JSON.stringify(generateMockData()));
-                }, 5000);
-            } else {
-                // In serve mode, only send data if we have received it from the backend
-                if (latestRecommendation) {
-                    ws.send(JSON.stringify(latestRecommendation));
-                }
-            }
-        },
-        close(ws) {
-            console.log('Client disconnected');
-            if (ws.data) {
-                clearInterval(ws.data as Timer);
-            }
-        },
-        message(ws, message) {
-            console.log(`Received message: ${message}`);
-        },
+
+        return new Response('Not Found', { status: 404, headers: corsHeaders });
     },
 });
 
