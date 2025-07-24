@@ -182,7 +182,7 @@ function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
     const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
     const [backendUrl, setBackendUrl] = useState(
-        () => localStorage.getItem('backendUrl') || 'https://ms.arthals.ink'
+        () => localStorage.getItem('backendUrl') || 'http://127.0.0.1:3001'
     );
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
 
@@ -299,3 +299,4 @@ function App() {
 }
 
 export default App;
+
