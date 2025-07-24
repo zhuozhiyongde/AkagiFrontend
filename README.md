@@ -1,27 +1,62 @@
-# React + TypeScript + Vite
+# Akagi Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个适配 [zhuozhiyongde/Akagi](https://github.com/zhuozhiyongde/Akagi) 的前端展示页面，替代原有的 TUI 模式，从而能够完成 AI 计算和前端展示的解耦，提高泛用性。
 
-Currently, two official plugins are available:
+## ✨ 特性
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+-   **实时数据更新**：通过 WebSocket 与 `Akagi` 的 `DataServer` 直接连接，确保推荐数据近乎零延迟。
+-   **双重渲染模式**：
+    -   **网页模式 (Web)**：直接在浏览器页面中清晰地展示推荐。
+    -   **直播流模式 (Stream)**：将推荐渲染成视频流，并支持**画中画 (Picture-in-Picture)** 功能，方便在游戏时悬浮查看。
+-   **个性化主题**：支持亮色、暗色以及跟随系统设置的主题模式。
+-   **后端地址可配置**：用户可以直接在前端页面上修改 `DataServer` 的地址，轻松连接到在任何地方运行的 `Akagi` 实例。
 
-## Expanding the ESLint configuration
+## 🚀 使用方式
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+该前端项目可以独立部署和运行，无需与 `Majsoul Helper` 的其他部分耦合。
 
-- Configure the top-level `parserOptions` property like this:
+### 1. 获取代码
 
-```js
-   parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-   },
+```bash
+git clone https://github.com/zhuozhiyongde/AkagiFrontend.git
+cd AkagiFrontend
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+### 2. 安装依赖
+
+```bash
+bun install
+```
+
+### 3. 启动开发服务器
+
+开发模式：
+
+```bash
+bun dev
+```
+
+生产模式：
+
+```bash
+bun run build
+bun run preview
+```
+
+服务启动后，通常可以在 `http://localhost:5173` 访问。
+
+### 4. 配置后端
+
+1.  确保你的 `Akagi` 实例正在运行，并且 `DataServer` 已启动。
+2.  在 `Akagi Frontend` 页面的输入框中，填入 `DataServer` 的地址（例如 `127.0.0.1:8765`）。
+3.  连接成功后，即可实时查看 AI 推荐。
+
+## 🔗 数据连接
+
+-   前端通过 WebSocket (`ws://<DataServer_IP>:<端口>`) 连接到 `Akagi` 项目中的 `DataServer`。
+-   `DataServer` 的默认端口是 `8765`。
+-   前端会实时接收 `DataServer` 推送的 JSON 格式的推荐数据，并进行渲染。
+
+## 📜 许可证
+
+GNU General Public License v3.0

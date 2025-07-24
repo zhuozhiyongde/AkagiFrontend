@@ -181,9 +181,7 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
     const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
-    const [backendUrl, setBackendUrl] = useState(
-        () => localStorage.getItem('backendUrl') || 'http://127.0.0.1:3001'
-    );
+    const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('backendUrl') || '127.0.0.1:8765');
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
 
     useEffect(() => {
@@ -212,29 +210,40 @@ function App() {
         localStorage.setItem('backendUrl', backendUrl);
     }, [backendUrl]);
 
-    // Effect to fetch data periodically
+    // Effect to handle WebSocket connection
     useEffect(() => {
-        const fetchData = async () => {
-            if (!backendUrl) return;
+        if (!backendUrl) return;
+
+        const wsUrl = `ws://${backendUrl}/`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
             try {
-                const response = await fetch(`${backendUrl}/recommendations`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (data) { // The server might return null initially
+                const data = JSON.parse(event.data);
+                if (data) {
                     setFullRecData(data.data);
                 }
             } catch (error) {
-                console.error("Failed to fetch recommendations:", error);
-                setFullRecData(null); // Clear data on error
+                console.error("Failed to parse WebSocket message:", error);
             }
         };
 
-        fetchData(); // Fetch immediately on component mount
-        const intervalId = setInterval(fetchData, 1000); // Poll every 1 second
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
 
-        return () => clearInterval(intervalId); // Cleanup on component unmount
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // Optional: implement reconnection logic here
+        };
+
+        return () => {
+            ws.close();
+        };
     }, [backendUrl]);
 
     return (
@@ -268,14 +277,14 @@ function App() {
             <main className="flex-grow flex flex-col items-center">
                 <div className="w-full max-w-5xl mb-4">
                     <label htmlFor="backendUrl" className="block text-sm font-medium mb-1">
-                        Backend URL
+                        DataServer
                     </label>
                     <Input
                         type="text"
                         id="backendUrl"
                         value={backendUrl}
                         onChange={(e) => setBackendUrl(e.target.value)}
-                        placeholder="http://..."
+                        placeholder="e.g., 127.0.0.1"
                     />
                 </div>
 

@@ -1,3 +1,5 @@
+import type { ServerWebSocket } from "bun";
+
 interface Recommendation {
     action: string;
     confidence: number;
@@ -13,31 +15,22 @@ interface RecommendationData {
     };
 }
 
-let latestRecommendation: RecommendationData | null = null;
+// This server is now only for mocking data for local frontend development.
+console.log("Starting server in MOCK mode.");
 
-const mode = process.argv.includes('mock') ? 'mock' : 'serve';
-
-if (mode === 'mock') {
-    // Generate initial data
-    latestRecommendation = generateMockData();
-    setInterval(() => {
-        latestRecommendation = generateMockData();
-        console.log('Generated new mock data');
-    }, 5000);
+interface WebSocketData {
+    intervalId?: ReturnType<typeof setInterval>;
 }
 
-console.log('AKAGI_AUTH_USERNAME:', process.env.AKAGI_AUTH_USERNAME);
-console.log('AKAGI_AUTH_PASSWORD:', process.env.AKAGI_AUTH_PASSWORD);
-
 const server = Bun.serve({
-    port: 3001,
+    port: 8765,
     hostname: "0.0.0.0",
-    async fetch(req) {
+    fetch(req, server) {
         const url = new URL(req.url);
 
         const corsHeaders = {
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         };
 
@@ -45,50 +38,39 @@ const server = Bun.serve({
             return new Response(null, { headers: corsHeaders });
         }
 
-        if (url.pathname === '/update' && req.method === 'POST') {
-            const username = process.env.AKAGI_AUTH_USERNAME;
-            const password = process.env.AKAGI_AUTH_PASSWORD;
-
-            if (username && password) {
-                const authHeader = req.headers.get("Authorization");
-                if (!authHeader || !authHeader.startsWith("Basic ")) {
-                    return new Response("Unauthorized", { status: 401, headers: { ...corsHeaders, "WWW-Authenticate": 'Basic realm="Secure Area"' } });
-                }
-
-                const decoded = Buffer.from(authHeader.substring(6), "base64").toString();
-                const [sentUser, sentPass] = decoded.split(":");
-
-                if (sentUser !== username || sentPass !== password) {
-                    return new Response("Forbidden", { status: 403, headers: corsHeaders });
-                }
+        if (url.pathname === '/') {
+            // upgrade the request to a WebSocket
+            if (server.upgrade(req, { data: {} })) {
+                return; // Bun automatically handles the response
             }
-
-            try {
-                const body = await req.json();
-                console.log('Received data from Python:', JSON.stringify(body, null, 2));
-                latestRecommendation = body; // Store the latest recommendation
-                return new Response('Data received', { status: 200, headers: corsHeaders });
-            } catch (error) {
-                console.error('Error processing POST request:', error);
-                return new Response('Invalid JSON', { status: 400, headers: corsHeaders });
-            }
-        }
-
-        if (url.pathname === '/recommendations' && req.method === 'GET') {
-            return new Response(JSON.stringify(latestRecommendation), {
-                headers: {
-                    ...corsHeaders,
-                    "Content-Type": "application/json"
-                },
-                status: 200
-            });
+            return new Response("Upgrade failed", { status: 500, headers: corsHeaders });
         }
 
         return new Response('Not Found', { status: 404, headers: corsHeaders });
     },
+    websocket: {
+        open(ws: ServerWebSocket<WebSocketData>) {
+            console.log("Client connected");
+            ws.data.intervalId = setInterval(() => {
+                const mockData = generateMockData();
+                console.log('Generated and sending new mock data');
+                ws.send(JSON.stringify(mockData));
+            }, 2000);
+        },
+        close(ws: ServerWebSocket<WebSocketData>) {
+            console.log("Client disconnected");
+            if (ws.data?.intervalId) {
+                clearInterval(ws.data.intervalId);
+            }
+        },
+        message(ws, message) {
+            // Not expecting messages from client in this mock server
+            console.log("Received message:", message);
+        },
+    },
 });
 
-console.log(`Server listening on 0.0.0.0:${server.port} in ${mode} mode`);
+console.log(`Mock server listening on ws://0.0.0.0:${server.port}`);
 
 function generateMockData(): RecommendationData {
     const tiles = ["1m", "2m", "3m", "4m", "5m", "5mr", "6m", "7m", "8m", "9m", "1p", "2p", "3p", "4p", "5p", "5pr", "6p", "7p", "8p", "9p", "1s", "2s", "3s", "4s", "5s", "5sr", "6s", "7s", "8s", "9s", "E", "S", "W", "N", "P", "F", "C"];
