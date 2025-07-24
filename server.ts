@@ -26,6 +26,9 @@ if (mode === 'mock') {
     }, 5000);
 }
 
+console.log('AKAGI_AUTH_USERNAME:', process.env.AKAGI_AUTH_USERNAME);
+console.log('AKAGI_AUTH_PASSWORD:', process.env.AKAGI_AUTH_PASSWORD);
+
 const server = Bun.serve({
     port: 3001,
     hostname: "0.0.0.0",
@@ -43,6 +46,23 @@ const server = Bun.serve({
         }
 
         if (url.pathname === '/update' && req.method === 'POST') {
+            const username = process.env.AKAGI_AUTH_USERNAME;
+            const password = process.env.AKAGI_AUTH_PASSWORD;
+
+            if (username && password) {
+                const authHeader = req.headers.get("Authorization");
+                if (!authHeader || !authHeader.startsWith("Basic ")) {
+                    return new Response("Unauthorized", { status: 401, headers: { ...corsHeaders, "WWW-Authenticate": 'Basic realm="Secure Area"' } });
+                }
+
+                const decoded = Buffer.from(authHeader.substring(6), "base64").toString();
+                const [sentUser, sentPass] = decoded.split(":");
+
+                if (sentUser !== username || sentPass !== password) {
+                    return new Response("Forbidden", { status: 403, headers: corsHeaders });
+                }
+            }
+
             try {
                 const body = await req.json();
                 console.log('Received data from Python:', JSON.stringify(body, null, 2));

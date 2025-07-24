@@ -226,7 +226,7 @@ function App() {
         };
 
         fetchData(); // Fetch immediately on component mount
-        const intervalId = setInterval(fetchData, 2000); // Poll every 2 seconds
+        const intervalId = setInterval(fetchData, 1000); // Poll every 1 second
 
         return () => clearInterval(intervalId); // Cleanup on component unmount
     }, [backendUrl]);
