@@ -63,7 +63,7 @@ const server = Bun.serve({
                 clearInterval(ws.data.intervalId);
             }
         },
-        message(ws, message) {
+        message(_ws, message) {
             // Not expecting messages from client in this mock server
             console.log("Received message:", message);
         },
