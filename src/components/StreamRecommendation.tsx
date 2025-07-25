@@ -80,15 +80,17 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
     const displayAction = actionNameMapping[action] || '打';
     const tile = actionNameMapping[action] ? null : action;
     const showConsumed = consumed && ['chi_low', 'chi_mid', 'chi_high', 'pon', 'kan_select'].includes(action);
-    const actionColor = colorMapping[action] || '#575654';
+    const actionColor = colorMapping[action];
 
     return (
         <div
             className="flex items-center justify-between p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700"
             style={{ height: '180px' }}>
             <div
-                className="w-40 font-bold text-white p-4 rounded-lg flex items-center justify-center"
-                style={{ fontSize: '36px', backgroundColor: actionColor }}>
+                className={`w-40 font-bold text-white p-4 rounded-lg flex items-center justify-center ${
+                    actionColor ? '' : 'bg-zinc-500 dark:bg-zinc-700'
+                }`}
+                style={{ fontSize: '36px', backgroundColor: actionColor || undefined }}>
                 {displayAction}
             </div>
 

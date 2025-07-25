@@ -6,6 +6,7 @@ import { Sun, Moon, Laptop, PictureInPicture2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Recommendation {
     action: string;
@@ -180,45 +181,66 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 
 function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
-    const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
-    const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('backendUrl') || '127.0.0.1:8765');
+    const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system');
+    const [protocol, setProtocol] = useState(() => localStorage.getItem('protocol') || 'ws');
+    const [backendAddress, setBackendAddress] = useState(() => localStorage.getItem('backendAddress') || '127.0.0.1:8765');
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
+    const [isConnected, setIsConnected] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const [backendUrl, setBackendUrl] = useState('');
+
+    const effectiveTheme = (() => {
+        if (theme === 'system') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return theme;
+    })();
 
     useEffect(() => {
-        const applyTheme = () => {
-            const root = window.document.documentElement;
-            root.classList.remove('light', 'dark');
+        const root = window.document.documentElement;
+        root.classList.remove('light', 'dark');
+        root.classList.add(effectiveTheme);
+        localStorage.setItem('theme', theme);
+    }, [theme, effectiveTheme]);
 
-            if (theme === 'system') {
-                const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                root.classList.add(systemTheme);
-                return;
-            }
-
-            root.classList.add(theme);
-        };
-
-        applyTheme();
-
+    useEffect(() => {
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        const handleChange = () => applyTheme();
-        mediaQuery.addEventListener('change', handleChange);
+        const handleChange = () => {
+            setTheme((prevTheme) => (prevTheme === 'system' ? 'system' : prevTheme));
+        };
+        if (theme === 'system') {
+            mediaQuery.addEventListener('change', handleChange);
+        }
         return () => mediaQuery.removeEventListener('change', handleChange);
     }, [theme]);
 
     useEffect(() => {
-        localStorage.setItem('backendUrl', backendUrl);
-    }, [backendUrl]);
+        if (protocol && backendAddress) {
+            const url = `${protocol}://${backendAddress}`;
+            setBackendUrl(url);
+            localStorage.setItem('protocol', protocol);
+            localStorage.setItem('backendAddress', backendAddress);
+        }
+    }, [protocol, backendAddress]);
 
-    // Effect to handle WebSocket connection
     useEffect(() => {
         if (!backendUrl) return;
 
-        const wsUrl = `ws://${backendUrl}/`;
-        const ws = new WebSocket(wsUrl);
+        let ws: WebSocket;
+        try {
+            ws = new WebSocket(backendUrl);
+        } catch (e) {
+            console.error("Invalid WebSocket URL:", e);
+            setError("Invalid WebSocket URL. Please check the address.");
+            setIsConnected(false);
+            return;
+        }
 
         ws.onopen = () => {
             console.log('WebSocket connected');
+            setIsConnected(true);
+            setError(null);
         };
 
         ws.onmessage = (event) => {
@@ -234,11 +256,13 @@ function App() {
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
+            setError("Connection failed. Check the console for details.");
+            setIsConnected(false);
         };
 
         ws.onclose = () => {
             console.log('WebSocket disconnected');
-            // Optional: implement reconnection logic here
+            setIsConnected(false);
         };
 
         return () => {
@@ -276,16 +300,36 @@ function App() {
 
             <main className="flex-grow flex flex-col items-center">
                 <div className="w-full max-w-5xl mb-4">
-                    <label htmlFor="backendUrl" className="block text-sm font-medium mb-1">
-                        DataServer
-                    </label>
-                    <Input
-                        type="text"
-                        id="backendUrl"
-                        value={backendUrl}
-                        onChange={(e) => setBackendUrl(e.target.value)}
-                        placeholder="e.g., 127.0.0.1"
-                    />
+                    <div className="flex items-end gap-2">
+                        <div className="flex-grow">
+                            <label htmlFor="backendUrl" className="block text-sm font-medium mb-1">
+                                DataServer
+                            </label>
+                            <div className="flex rounded-md shadow-sm">
+                                <Select value={protocol} onValueChange={setProtocol}>
+                                    <SelectTrigger className="w-[100px] rounded-r-none -mr-[1px]">
+                                        <SelectValue placeholder="Protocol" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="ws">ws://</SelectItem>
+                                        <SelectItem value="wss">wss://</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Input
+                                    type="text"
+                                    id="backendUrl"
+                                    value={backendAddress}
+                                    onChange={(e) => setBackendAddress(e.target.value)}
+                                    placeholder="e.g., 127.0.0.1:8765"
+                                    className="rounded-l-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center h-10">
+                            <div className={`w-4 h-4 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        </div>
+                    </div>
+                    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
                 </div>
 
                 <Tabs value={mode} onValueChange={setMode} className="w-full max-w-5xl">
@@ -299,13 +343,33 @@ function App() {
                         </div>
                     </TabsContent>
                     <TabsContent value="stream">
-                        {mode === 'stream' && <StreamPlayer data={fullRecData} theme={theme} />}
+                        {mode === 'stream' && <StreamPlayer data={fullRecData} theme={effectiveTheme} />}
                     </TabsContent>
                 </Tabs>
             </main>
+            <footer className="text-center mt-8 text-xs text-gray-500">
+                <p>
+                    Made with ❤️ by{' '}
+                    <a
+                        href="https://arthals.ink"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-pink-500 hover:underline">
+                        @Arthals
+                    </a>
+                </p>
+                <p className="mt-1">
+                    <a
+                        href="https://github.com/zhuozhiyongde/AkagiFrontend/blob/main/LICENSE"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline">
+                        GPL-3.0 License
+                    </a>
+                </p>
+            </footer>
         </div>
     );
 }
 
 export default App;
-
