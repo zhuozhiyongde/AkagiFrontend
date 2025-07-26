@@ -154,7 +154,7 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 
     return (
         <>
-            <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <div className="absolute left-[-9999px] top-[-100px]">
                 <div id="render-source-pip">
                     <StreamRenderComponent data={data} theme={theme} />
                 </div>

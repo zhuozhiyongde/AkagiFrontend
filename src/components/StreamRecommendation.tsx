@@ -10,8 +10,8 @@ interface RecommendationProps {
 const Tile: React.FC<{ tile: string }> = ({ tile }) => {
     const svgPath = `/Resources/${tile}.svg`;
     return (
-        <div className="flex items-center justify-center relative w-14 h-20">
-            <img src={svgPath} alt={tile} className="absolute bg-white rounded-md" />
+        <div className="flex items-center justify-center relative w-20 h-fit">
+            <img src={svgPath} alt={tile} className="absolute bg-white rounded-md border-2 border-zinc-300 dark:border-zinc-700" />
         </div>
     );
 };
@@ -47,7 +47,7 @@ const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_
         tilesToShow = consumed.map((c, i) => <Tile key={i} tile={c} />);
     }
 
-    return <div className="flex items-center space-x-1">{tilesToShow}</div>;
+    return <div className="flex items-center space-x-2">{tilesToShow}</div>;
 };
 
 const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, consumed, last_kawa_tile }) => {
@@ -87,10 +87,10 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
             className="flex items-center justify-between p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700"
             style={{ height: '180px' }}>
             <div
-                className={`w-40 font-bold text-white p-4 rounded-lg flex items-center justify-center ${
+                className={`w-40 font-bold text-white p-4 rounded-lg flex items-center justify-center text-[50px] ${
                     actionColor ? '' : 'bg-zinc-500 dark:bg-zinc-700'
                 }`}
-                style={{ fontSize: '36px', backgroundColor: actionColor || undefined }}>
+                style={{ backgroundColor: actionColor || undefined }}>
                 {displayAction}
             </div>
 

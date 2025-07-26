@@ -10,8 +10,8 @@ interface RecommendationProps {
 const Tile: React.FC<{ tile: string }> = ({ tile }) => {
     const svgPath = `/Resources/${tile}.svg`;
     return (
-        <div className="flex items-center justify-center relative w-10 h-16 lg:w-14 lg:h-20">
-            <img src={svgPath} alt={tile} className="absolute bg-white rounded-md" />
+        <div className="flex items-center justify-center relative w-10 h-16 md:w-16 md:h-24 lg:w-20 lg:h-28">
+            <img src={svgPath} alt={tile} className="absolute bg-white rounded-md border-2 border-zinc-300 dark:border-zinc-700" />
         </div>
     );
 };
@@ -37,7 +37,7 @@ const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_
         tilesToShow = (
             <>
                 <Tile tile={last_kawa_tile} />
-                <div className="w-1 h-16 lg:h-20 bg-zinc-400 dark:bg-zinc-600 mx-1 self-center"></div>
+                <div className="w-1 h-16 md:h-20 lg:h-24 bg-zinc-400 dark:bg-zinc-600 mx-1 self-center"></div>
                 {handTiles.map((t, i) => (
                     <Tile key={i} tile={t} />
                 ))}
@@ -47,7 +47,7 @@ const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_
         tilesToShow = consumed.map((c, i) => <Tile key={i} tile={c} />);
     }
 
-    return <div className="flex items-center justify-center gap-1">{tilesToShow}</div>;
+    return <div className="flex items-center justify-center gap-1 flex-nowrap">{tilesToShow}</div>;
 };
 
 const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, consumed, last_kawa_tile }) => {
@@ -83,21 +83,21 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
     const actionColor = colorMapping[action] || '#575654';
 
     return (
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700">
+        <div className="flex flex-col lg:flex-row items-center justify-between p-3 lg:p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700 lg:h-[180px]">
             <div
-                className="flex-none w-full lg:w-32 h-20 lg:h-32 text-3xl font-bold text-white p-4 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: actionColor }}>
+                className="flex-none w-28 h-16 md:w-36 md:h-24 lg:w-40 lg:h-32 text-2xl md:text-3xl lg:text-[50px] font-bold text-white p-2 md:p-3 lg:p-4 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: actionColor || undefined }}>
                 {displayAction}
             </div>
 
-            <div className="flex-1 flex items-center justify-center min-w-0 my-4 lg:my-0">
+            <div className="flex-grow flex items-center justify-center mx-3 lg:mx-6 my-2 lg:my-0">
                 {tile && <Tile tile={tile} />}
                 {showConsumed && consumed && (
                     <ConsumedDisplay action={action} consumed={consumed} last_kawa_tile={last_kawa_tile} />
                 )}
             </div>
 
-            <div className="flex-none w-full lg:w-48 text-center lg:text-right font-mono text-cyan-400 text-4xl lg:text-5xl">
+            <div className="flex-none w-28 md:w-36 lg:w-48 text-right font-mono text-cyan-400 text-2xl md:text-3xl lg:text-[48px]">
                 {(confidence * 100).toFixed(2)}%
             </div>
         </div>

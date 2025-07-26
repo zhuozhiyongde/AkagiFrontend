@@ -23,7 +23,7 @@ interface WebSocketData {
 }
 
 const server = Bun.serve({
-    port: 8765,
+    port: 8766,
     hostname: "0.0.0.0",
     fetch(req, server) {
         const url = new URL(req.url);
@@ -51,11 +51,13 @@ const server = Bun.serve({
     websocket: {
         open(ws: ServerWebSocket<WebSocketData>) {
             console.log("Client connected");
+            const mockData = generateMockData();
+            ws.send(JSON.stringify(mockData));
             ws.data.intervalId = setInterval(() => {
                 const mockData = generateMockData();
                 console.log('Generated and sending new mock data');
                 ws.send(JSON.stringify(mockData));
-            }, 2000);
+            }, 20000);
         },
         close(ws: ServerWebSocket<WebSocketData>) {
             console.log("Client disconnected");
