@@ -184,6 +184,14 @@ function App() {
     const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system');
     const [protocol, setProtocol] = useState(() => localStorage.getItem('protocol') || 'ws');
     const [backendAddress, setBackendAddress] = useState(() => localStorage.getItem('backendAddress') || '127.0.0.1:8765');
+    const [clientId] = useState(() => {
+        let id = localStorage.getItem('clientId');
+        if (!id) {
+            id = Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('clientId', id);
+        }
+        return id;
+    });
     const [mode, setMode] = useState('stream'); // 'web' or 'stream'
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -217,56 +225,84 @@ function App() {
 
     useEffect(() => {
         if (protocol && backendAddress) {
-            const url = `${protocol}://${backendAddress}`;
+            const url = `${protocol}://${backendAddress}?clientId=${clientId}`;
             setBackendUrl(url);
             localStorage.setItem('protocol', protocol);
             localStorage.setItem('backendAddress', backendAddress);
         }
-    }, [protocol, backendAddress]);
+    }, [protocol, backendAddress, clientId]);
 
     useEffect(() => {
         if (!backendUrl) return;
 
         let ws: WebSocket;
-        try {
-            ws = new WebSocket(backendUrl);
-        } catch (e) {
-            console.error("Invalid WebSocket URL:", e);
-            setError("Invalid WebSocket URL. Please check the address.");
-            setIsConnected(false);
-            return;
-        }
+        let reconnectTimeoutId: number;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 3;
 
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-            setIsConnected(true);
-            setError(null);
-        };
-
-        ws.onmessage = (event) => {
+        const connect = () => {
             try {
-                const data = JSON.parse(event.data);
-                if (data) {
-                    setFullRecData(data.data);
-                }
-            } catch (error) {
-                console.error("Failed to parse WebSocket message:", error);
+                ws = new WebSocket(backendUrl);
+            } catch (e) {
+                console.error('Invalid WebSocket URL:', e);
+                setError('Invalid WebSocket URL. Please check the address.');
+                setIsConnected(false);
+                return;
             }
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                setIsConnected(true);
+                setError(null);
+                reconnectAttempts = 0; // Reset on successful connection
+                if (reconnectTimeoutId) {
+                    clearTimeout(reconnectTimeoutId);
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data) {
+                        setFullRecData(data.data);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse WebSocket message:', error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                setError('Connection failed. Check the console for details.');
+                setIsConnected(false);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected.');
+                setIsConnected(false);
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    // Attempt to reconnect after a delay
+                    reconnectTimeoutId = window.setTimeout(connect, 1000);
+                } else {
+                    console.log('Max reconnect attempts reached. Giving up.');
+                    setError('Connection lost. Max reconnect attempts reached.');
+                }
+            };
         };
 
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            setError("Connection failed. Check the console for details.");
-            setIsConnected(false);
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            setIsConnected(false);
-        };
+        connect();
 
         return () => {
-            ws.close();
+            if (reconnectTimeoutId) {
+                clearTimeout(reconnectTimeoutId);
+            }
+            if (ws) {
+                // Prevent onclose from triggering reconnect on component unmount
+                ws.onclose = null;
+                ws.close();
+            }
         };
     }, [backendUrl]);
 
