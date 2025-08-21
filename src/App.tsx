@@ -8,6 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+// 类型声明扩展
+declare global {
+    interface Window {
+        gc?: () => void;
+    }
+    interface Performance {
+        memory?: {
+            usedJSHeapSize: number;
+            totalJSHeapSize: number;
+            jsHeapSizeLimit: number;
+        };
+    }
+}
+
 interface Recommendation {
     action: string;
     confidence: number;
@@ -76,14 +90,32 @@ const StreamRenderComponent = ({ data, theme }: { data: FullRecommendationData |
 const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; theme: string }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+    const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         const renderSource = document.getElementById('render-source-pip');
 
+        // 获取或创建 canvas context（只创建一次）
+        if (canvas && !ctxRef.current) {
+            ctxRef.current = canvas.getContext('2d', { willReadFrequently: true });
+        }
+
         async function drawToCanvas() {
-            if (!canvas || !renderSource) return;
+            if (!canvas || !renderSource || !ctxRef.current) return;
+            
             try {
+                // 清理之前的 tempCanvas
+                if (tempCanvasRef.current) {
+                    const oldCtx = tempCanvasRef.current.getContext('2d');
+                    if (oldCtx) {
+                        oldCtx.clearRect(0, 0, tempCanvasRef.current.width, tempCanvasRef.current.height);
+                    }
+                    tempCanvasRef.current = null;
+                }
+
                 const tempCanvas = await html2canvas(renderSource as HTMLElement, {
                     useCORS: true,
                     allowTaint: false,
@@ -95,36 +127,98 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
                     scrollX: -window.scrollX,
                     scrollY: -window.scrollY,
                 });
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) return;
+                
+                // 保存引用以便后续清理
+                tempCanvasRef.current = tempCanvas;
+                
+                const ctx = ctxRef.current;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, 1200, 675);
+                
+                // 内存监控 (仅在支持的浏览器中)
+                if (performance.memory) {
+                    const memInfo = performance.memory;
+                    const usedMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
+                    const limitMB = Math.round(memInfo.jsHeapSizeLimit / 1024 / 1024);
+                    
+                    // 当内存使用超过限制的80%时发出警告
+                    if (usedMB / limitMB > 0.8) {
+                        setMemoryWarning(`内存使用过高: ${usedMB}MB/${limitMB}MB`);
+                        console.warn(`Memory usage high: ${usedMB}MB/${limitMB}MB`);
+                    } else {
+                        setMemoryWarning(null);
+                    }
+                }
+                
             } catch (err) {
                 console.error('html2canvas failed:', err);
+                setMemoryWarning('渲染失败，可能由于内存不足');
+                
+                // 强制触发垃圾回收（在支持的浏览器中）
+                if (window.gc) {
+                    window.gc();
+                }
             }
         }
 
         drawToCanvas();
+        
+        // 清理函数
+        return () => {
+            if (tempCanvasRef.current) {
+                const oldCtx = tempCanvasRef.current.getContext('2d');
+                if (oldCtx) {
+                    oldCtx.clearRect(0, 0, tempCanvasRef.current.width, tempCanvasRef.current.height);
+                }
+                tempCanvasRef.current = null;
+            }
+        };
     }, [data, theme]);
 
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
+        let currentStream: MediaStream | null = null;
 
         async function setupStream() {
             if (!video || !canvas) return;
-            const stream = canvas.captureStream(10);
-            video.srcObject = stream;
-            video.load();
-            video.play().catch((error) => console.error('Video play failed:', error));
+            
+            try {
+                // 清理之前的流
+                if (currentStream) {
+                    currentStream.getTracks().forEach((track) => track.stop());
+                }
+                
+                currentStream = canvas.captureStream(10);
+                video.srcObject = currentStream;
+                video.load();
+                await video.play();
+            } catch (error) {
+                console.error('Video play failed:', error);
+                // 在 iOS 上，如果视频播放失败，清理资源
+                if (currentStream) {
+                    currentStream.getTracks().forEach((track) => track.stop());
+                    currentStream = null;
+                }
+            }
         }
 
         function cleanupStream() {
             if (video && video.srcObject) {
                 const stream = video.srcObject as MediaStream;
-                stream.getTracks().forEach((track) => track.stop());
+                stream.getTracks().forEach((track) => {
+                    track.stop();
+                    // 手动触发垃圾回收提示（在支持的浏览器中）
+                    if (track.kind === 'video') {
+                        (track as any).enabled = false;
+                    }
+                });
                 video.pause();
                 video.srcObject = null;
+            }
+            if (currentStream) {
+                currentStream.getTracks().forEach((track) => track.stop());
+                currentStream = null;
             }
         }
 
@@ -143,11 +237,35 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
                 if (document.pictureInPictureElement) {
                     await document.exitPictureInPicture();
                 } else {
+                    // 在启动PiP前检查内存状态
+                    if (performance.memory) {
+                        const memInfo = performance.memory;
+                        const usedMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
+                        const limitMB = Math.round(memInfo.jsHeapSizeLimit / 1024 / 1024);
+                        
+                        if (usedMB / limitMB > 0.75) {
+                            if (!confirm(`内存使用较高 (${usedMB}MB/${limitMB}MB)，可能影响PiP性能。是否继续？`)) {
+                                return;
+                            }
+                        }
+                    }
+                    
                     await videoRef.current.requestPictureInPicture();
                 }
             } catch (error) {
                 console.error('PiP request failed:', error);
-                alert('Picture-in-Picture failed: ' + (error as Error).message);
+                const errorMsg = (error as Error).message;
+                
+                // 根据错误类型提供更好的用户反馈
+                if (errorMsg.includes('NotSupportedError')) {
+                    alert('您的设备或浏览器不支持画中画功能');
+                } else if (errorMsg.includes('InvalidStateError')) {
+                    alert('视频未准备就绪，请稍等片刻再试');
+                } else if (errorMsg.includes('NotAllowedError')) {
+                    alert('画中画权限被拒绝，请检查浏览器设置');
+                } else {
+                    alert('画中画启动失败，可能由于内存不足: ' + errorMsg);
+                }
             }
         } else {
             alert('Picture-in-Picture is not supported by your browser or the video is not ready.');
@@ -172,6 +290,11 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
                 />
             </div>
             <div className="text-center mt-4">
+                {memoryWarning && (
+                    <div className="mb-2 p-2 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded text-sm">
+                        ⚠️ {memoryWarning}
+                    </div>
+                )}
                 <Button onClick={handlePipClick}>
                     <PictureInPicture2 className="mr-2 h-4 w-4" />
                     开启画中画

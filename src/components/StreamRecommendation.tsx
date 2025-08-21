@@ -84,7 +84,7 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
 
     return (
         <div
-            className="flex items-center justify-between p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700"
+            className="flex items-center justify-between p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border-2 border-zinc-300 dark:border-zinc-700 px-8"
             style={{ height: '180px' }}>
             <div
                 className={`w-40 font-bold text-white p-4 rounded-lg flex items-center justify-center text-[50px] ${
