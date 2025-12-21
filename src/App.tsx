@@ -307,7 +307,13 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
 function App() {
     const [fullRecData, setFullRecData] = useState<FullRecommendationData | null>(null);
     const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system');
-    const [protocol, setProtocol] = useState(() => localStorage.getItem('protocol') || 'ws');
+    const [protocol, setProtocol] = useState(() => {
+        const saved = localStorage.getItem('protocol');
+        if (saved === 'https' || saved === 'wss') {
+            return 'https';
+        }
+        return 'http';
+    });
     const [backendAddress, setBackendAddress] = useState(() => localStorage.getItem('backendAddress') || '127.0.0.1:8765');
     const [clientId] = useState(() => {
         let id = localStorage.getItem('clientId');
@@ -360,23 +366,23 @@ function App() {
     useEffect(() => {
         if (!backendUrl) return;
 
-        let ws: WebSocket;
-        let reconnectTimeoutId: number;
+        let eventSource: EventSource | null = null;
+        let reconnectTimeoutId: number | undefined;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 3;
 
         const connect = () => {
             try {
-                ws = new WebSocket(backendUrl);
+                eventSource = new EventSource(backendUrl);
             } catch (e) {
-                console.error('Invalid WebSocket URL:', e);
-                setError('Invalid WebSocket URL. Please check the address.');
+                console.error('Invalid SSE URL:', e);
+                setError('Invalid SSE URL. Please check the address.');
                 setIsConnected(false);
                 return;
             }
 
-            ws.onopen = () => {
-                console.log('WebSocket connected');
+            eventSource.onopen = () => {
+                console.log('SSE connected');
                 setIsConnected(true);
                 setError(null);
                 reconnectAttempts = 0; // Reset on successful connection
@@ -385,26 +391,24 @@ function App() {
                 }
             };
 
-            ws.onmessage = (event) => {
+            eventSource.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data) {
                         setFullRecData(data.data);
                     }
                 } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
+                    console.error('Failed to parse SSE message:', error);
                 }
             };
 
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+            eventSource.onerror = (event) => {
+                console.error('SSE error:', event);
                 setError('Connection failed. Check the console for details.');
                 setIsConnected(false);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected.');
-                setIsConnected(false);
+                if (eventSource) {
+                    eventSource.close();
+                }
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
@@ -423,10 +427,8 @@ function App() {
             if (reconnectTimeoutId) {
                 clearTimeout(reconnectTimeoutId);
             }
-            if (ws) {
-                // Prevent onclose from triggering reconnect on component unmount
-                ws.onclose = null;
-                ws.close();
+            if (eventSource) {
+                eventSource.close();
             }
         };
     }, [backendUrl]);
@@ -472,8 +474,8 @@ function App() {
                                         <SelectValue placeholder="Protocol" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="ws">ws://</SelectItem>
-                                        <SelectItem value="wss">wss://</SelectItem>
+                                        <SelectItem value="http">http://</SelectItem>
+                                        <SelectItem value="https">https://</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <Input

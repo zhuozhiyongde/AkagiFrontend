@@ -4,7 +4,7 @@
 
 ## ✨ 特性
 
--   **实时数据更新**：通过 WebSocket 与 `Akagi` 的 `DataServer` 直接连接，确保推荐数据近乎零延迟。
+-   **实时数据更新**：通过 SSE（Server-Sent Events）与 `Akagi` 的 `DataServer` 直接连接，确保推荐数据近乎零延迟。
 -   **双重渲染模式**：
     -   **网页模式 (Web)**：直接在浏览器页面中清晰地展示推荐。
     -   **直播流模式 (Stream)**：将推荐渲染成视频流，并支持**画中画 (Picture-in-Picture)** 功能，方便在游戏时悬浮查看。
@@ -53,7 +53,7 @@ bun run preview
 
 ## 🔗 数据连接
 
--   前端通过 WebSocket (`ws://<DataServer_IP>:<端口>`) 连接到 `Akagi` 项目中的 `DataServer`。
+-   前端通过 SSE (`http://<DataServer_IP>:<端口>`) 连接到 `Akagi` 项目中的 `DataServer`。
 -   `DataServer` 的默认端口是 `8765`。
 -   前端会实时接收 `DataServer` 推送的 JSON 格式的推荐数据，并进行渲染。
 

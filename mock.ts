@@ -1,5 +1,3 @@
-import type { ServerWebSocket } from "bun";
-
 interface Recommendation {
     action: string;
     confidence: number;
@@ -16,63 +14,77 @@ interface RecommendationData {
 }
 
 // This server is now only for mocking data for local frontend development.
-console.log("Starting server in MOCK mode.");
+console.log("Starting server in MOCK mode (SSE).");
 
-interface WebSocketData {
-    intervalId?: ReturnType<typeof setInterval>;
-}
+const encoder = new TextEncoder();
+const STREAM_INTERVAL_MS = 20000;
+const KEEPALIVE_INTERVAL_MS = 10000;
+
+const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+};
 
 const server = Bun.serve({
     port: 8766,
     hostname: "0.0.0.0",
-    fetch(req, server) {
+    fetch(req) {
         const url = new URL(req.url);
-
-        const corsHeaders = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        };
 
         if (req.method === "OPTIONS") {
             return new Response(null, { headers: corsHeaders });
         }
 
-        if (url.pathname === '/') {
-            // upgrade the request to a WebSocket
-            if (server.upgrade(req, { data: {} })) {
-                return; // Bun automatically handles the response
-            }
-            return new Response("Upgrade failed", { status: 500, headers: corsHeaders });
+        if (url.pathname === "/") {
+            let dataInterval: ReturnType<typeof setInterval> | undefined;
+            let keepAliveInterval: ReturnType<typeof setInterval> | undefined;
+
+            const stream = new ReadableStream({
+                start(controller) {
+                    console.log("SSE client connected");
+
+                    const sendKeepAlive = () => controller.enqueue(encoder.encode(": keep-alive\n\n"));
+                    const sendData = (payload: RecommendationData) =>
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+
+                    controller.enqueue(encoder.encode(": connected\n\n"));
+                    sendData(generateMockData());
+
+                    dataInterval = setInterval(() => {
+                        const mockData = generateMockData();
+                        console.log("Generated and sending new mock data");
+                        sendData(mockData);
+                    }, STREAM_INTERVAL_MS);
+
+                    keepAliveInterval = setInterval(sendKeepAlive, KEEPALIVE_INTERVAL_MS);
+                },
+                cancel() {
+                    console.log("SSE client disconnected");
+                    if (dataInterval) {
+                        clearInterval(dataInterval);
+                    }
+                    if (keepAliveInterval) {
+                        clearInterval(keepAliveInterval);
+                    }
+                },
+            });
+
+            return new Response(stream, {
+                headers: {
+                    ...corsHeaders,
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
+            });
         }
 
-        return new Response('Not Found', { status: 404, headers: corsHeaders });
-    },
-    websocket: {
-        open(ws: ServerWebSocket<WebSocketData>) {
-            console.log("Client connected");
-            const mockData = generateMockData();
-            ws.send(JSON.stringify(mockData));
-            ws.data.intervalId = setInterval(() => {
-                const mockData = generateMockData();
-                console.log('Generated and sending new mock data');
-                ws.send(JSON.stringify(mockData));
-            }, 20000);
-        },
-        close(ws: ServerWebSocket<WebSocketData>) {
-            console.log("Client disconnected");
-            if (ws.data?.intervalId) {
-                clearInterval(ws.data.intervalId);
-            }
-        },
-        message(_ws, message) {
-            // Not expecting messages from client in this mock server
-            console.log("Received message:", message);
-        },
+        return new Response("Not Found", { status: 404, headers: corsHeaders });
     },
 });
 
-console.log(`Mock server listening on ws://0.0.0.0:${server.port}`);
+console.log(`Mock server listening on http://0.0.0.0:${server.port}`);
 
 function generateMockData(): RecommendationData {
     const tiles = ["1m", "2m", "3m", "4m", "5m", "5mr", "6m", "7m", "8m", "9m", "1p", "2p", "3p", "4p", "5p", "5pr", "6p", "7p", "8p", "9p", "1s", "2s", "3s", "4s", "5s", "5sr", "6s", "7s", "8s", "9s", "E", "S", "W", "N", "P", "F", "C"];
