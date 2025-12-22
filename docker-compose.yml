@@ -1,0 +1,6 @@
+services:
+    frontend:
+        image: arthals/majsoul-helper-frontend:latest
+        container_name: akagi-frontend
+        ports:
+            - '80:80'
