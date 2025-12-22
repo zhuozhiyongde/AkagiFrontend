@@ -1,9 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import html2canvas from 'html2canvas';
-import WebRecommendation from './components/WebRecommendation';
 import StreamRecommendation from './components/StreamRecommendation';
 import { Sun, Moon, Laptop, PictureInPicture2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,29 +31,6 @@ interface FullRecommendationData {
     tehai: string[];
     last_kawa_tile: string;
 }
-
-const WebRenderComponent = ({ data }: { data: FullRecommendationData | null }) => {
-    if (!data) {
-        return (
-            <div className="p-4 sm:p-8 bg-white dark:bg-zinc-800 text-black dark:text-white flex items-center justify-center w-full h-full">
-                <h2 className="text-2xl sm:text-4xl font-bold text-center">Waiting for data...</h2>
-            </div>
-        );
-    }
-
-    const { recommendations, last_kawa_tile } = data;
-
-    return (
-        <div className="p-4 sm:p-8 bg-white dark:bg-zinc-800 text-black dark:text-white mb-4 flex flex-col w-full h-full">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4 flex-shrink-0">Mortal Recommendations</h2>
-            <div className="flex flex-col gap-2 sm:gap-4">
-                {recommendations.slice(0, 3).map((rec, index) => (
-                    <WebRecommendation key={index + rec.action} {...rec} last_kawa_tile={last_kawa_tile} />
-                ))}
-            </div>
-        </div>
-    );
-};
 
 const StreamRenderComponent = ({ data, theme }: { data: FullRecommendationData | null; theme: string }) => {
     const themeClass = theme === 'dark' ? 'dark' : '';
@@ -323,7 +298,6 @@ function App() {
         }
         return id;
     });
-    const [mode, setMode] = useState('stream'); // 'web' or 'stream'
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -507,20 +481,9 @@ function App() {
                     {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
                 </div>
 
-                <Tabs value={mode} onValueChange={setMode} className="w-full max-w-5xl">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="web">Web</TabsTrigger>
-                        <TabsTrigger value="stream">Stream</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="web">
-                        <div className="mt-4">
-                            <WebRenderComponent data={fullRecData} />
-                        </div>
-                    </TabsContent>
-                    <TabsContent value="stream">
-                        {mode === 'stream' && <StreamPlayer data={fullRecData} theme={effectiveTheme} />}
-                    </TabsContent>
-                </Tabs>
+                <div className="w-full max-w-5xl">
+                    <StreamPlayer data={fullRecData} theme={effectiveTheme} />
+                </div>
             </main>
             <footer className="text-center mt-8 text-xs text-gray-500">
                 <p>
