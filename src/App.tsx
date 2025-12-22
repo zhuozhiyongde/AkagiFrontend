@@ -366,14 +366,21 @@ function App() {
     useEffect(() => {
         if (!backendUrl) return;
 
-        let eventSource: EventSource | null = null;
+        let currentSource: EventSource | null = null;
         let reconnectTimeoutId: number | undefined;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 3;
 
         const connect = () => {
+            // 关闭旧连接，避免同 clientId 并发导致服务器踢出
+            if (currentSource) {
+                currentSource.close();
+                currentSource = null;
+            }
+
+            let es: EventSource;
             try {
-                eventSource = new EventSource(backendUrl);
+                es = new EventSource(backendUrl);
             } catch (e) {
                 console.error('Invalid SSE URL:', e);
                 setError('Invalid SSE URL. Please check the address.');
@@ -381,17 +388,20 @@ function App() {
                 return;
             }
 
-            eventSource.onopen = () => {
+            currentSource = es;
+
+            es.onopen = () => {
                 console.log('SSE connected');
                 setIsConnected(true);
                 setError(null);
                 reconnectAttempts = 0; // Reset on successful connection
                 if (reconnectTimeoutId) {
                     clearTimeout(reconnectTimeoutId);
+                    reconnectTimeoutId = undefined;
                 }
             };
 
-            eventSource.onmessage = (event) => {
+            es.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data) {
@@ -402,17 +412,19 @@ function App() {
                 }
             };
 
-            eventSource.onerror = (event) => {
+            es.onerror = (event) => {
                 console.error('SSE error:', event);
+                // 如果已经有更新的连接在使用，忽略旧实例的错误回调
+                if (currentSource !== es) return;
+
                 setError('Connection failed. Check the console for details.');
                 setIsConnected(false);
-                if (eventSource) {
-                    eventSource.close();
-                }
+                es.close();
+                currentSource = null;
+
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
-                    // Attempt to reconnect after a delay
                     reconnectTimeoutId = window.setTimeout(connect, 1000);
                 } else {
                     console.log('Max reconnect attempts reached. Giving up.');
@@ -427,8 +439,8 @@ function App() {
             if (reconnectTimeoutId) {
                 clearTimeout(reconnectTimeoutId);
             }
-            if (eventSource) {
-                eventSource.close();
+            if (currentSource) {
+                currentSource.close();
             }
         };
     }, [backendUrl]);
