@@ -341,11 +341,23 @@ function App() {
         if (!backendUrl) return;
 
         let currentSource: EventSource | null = null;
-        let reconnectTimeoutId: number | undefined;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 3;
+        let reconnectTimer: number | undefined;
+        let stopped = false;
+        let backoff = 1000;
+        const maxBackoff = 30_000;
+
+        const scheduleReconnect = () => {
+            if (stopped || reconnectTimer) return;
+            reconnectTimer = window.setTimeout(() => {
+                reconnectTimer = undefined;
+                backoff = Math.min(backoff * 2, maxBackoff);
+                connect();
+            }, backoff);
+        };
 
         const connect = () => {
+            if (stopped) return;
+
             // 关闭旧连接，避免同 clientId 并发导致服务器踢出
             if (currentSource) {
                 currentSource.close();
@@ -359,6 +371,7 @@ function App() {
                 console.error('Invalid SSE URL:', e);
                 setError('Invalid SSE URL. Please check the address.');
                 setIsConnected(false);
+                scheduleReconnect();
                 return;
             }
 
@@ -368,10 +381,10 @@ function App() {
                 console.log('SSE connected');
                 setIsConnected(true);
                 setError(null);
-                reconnectAttempts = 0; // Reset on successful connection
-                if (reconnectTimeoutId) {
-                    clearTimeout(reconnectTimeoutId);
-                    reconnectTimeoutId = undefined;
+                backoff = 1000;
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = undefined;
                 }
             };
 
@@ -388,21 +401,11 @@ function App() {
 
             es.onerror = (event) => {
                 console.error('SSE error:', event);
-                // 如果已经有更新的连接在使用，忽略旧实例的错误回调
-                if (currentSource !== es) return;
-
-                setError('Connection failed. Check the console for details.');
+                // EventSource 会自动重连（readyState === CONNECTING），只有真正关闭时我们才手动重试
                 setIsConnected(false);
-                es.close();
-                currentSource = null;
-
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    reconnectAttempts++;
-                    console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
-                    reconnectTimeoutId = window.setTimeout(connect, 1000);
-                } else {
-                    console.log('Max reconnect attempts reached. Giving up.');
-                    setError('Connection lost. Max reconnect attempts reached.');
+                setError('连接断开，正在重试...');
+                if (es.readyState === EventSource.CLOSED) {
+                    scheduleReconnect();
                 }
             };
         };
@@ -410,8 +413,9 @@ function App() {
         connect();
 
         return () => {
-            if (reconnectTimeoutId) {
-                clearTimeout(reconnectTimeoutId);
+            stopped = true;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
             }
             if (currentSource) {
                 currentSource.close();
