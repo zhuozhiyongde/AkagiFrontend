@@ -46,13 +46,13 @@ bun run preview
 ### 4. 配置后端
 
 1.  确保你的 `Akagi` 实例正在运行，并且 `DataServer` 已启动。
-2.  在 `Akagi Frontend` 页面的输入框中，填入 `DataServer` 的地址（例如 `127.0.0.1:8765`）。
+2.  在 `Akagi Frontend` 页面的输入框中，填入 `DataServer` 的地址（例如 `127.0.0.1:7881`）。
 3.  连接成功后，即可实时查看 AI 推荐。
 
 ## 🔗 数据连接
 
 -   前端通过 SSE (`http://<DataServer_IP>:<端口>`) 连接到 `Akagi` 项目中的 `DataServer`。
--   `DataServer` 的默认端口是 `8765`。
+-   `DataServer` 的默认端口是 `7881`。
 -   前端会实时接收 `DataServer` 推送的 JSON 格式的推荐数据，并进行渲染。
 
 ## 📜 许可证

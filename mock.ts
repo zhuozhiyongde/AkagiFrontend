@@ -1,16 +1,23 @@
 interface Recommendation {
     action: string;
-    confidence: number;
+    confidence?: number;
     consumed?: string[];
+    tile?: string;
+}
+
+interface BestAction {
+    type: string;
+    pai?: string;
+    consumed?: string[];
+    tsumogiri?: boolean;
+    actor?: number;
 }
 
 interface RecommendationData {
-    type: string;
-    data: {
-        recommendations: Recommendation[];
-        tehai: string[];
-        last_kawa_tile: string;
-    };
+    recommendations: Recommendation[] | null;
+    tehai: string[];
+    last_kawa_tile: string | null;
+    best_action: BestAction | null;
 }
 
 // This server is now only for mocking data for local frontend development.
@@ -107,7 +114,7 @@ function generateMockData(): RecommendationData {
     const actionTypes = ["dahai", "chi_low", "chi_mid", "chi_high", "pon", "kan_select", "reach", "none"];
     
     // Ensure at least one chi or pon for testing
-    let last_kawa_tile = getRandomTile();
+    let last_kawa_tile: string | null = getRandomTile();
 
     for (let i = 0; i < numRecommendations; i++) {
         let actionType = actionTypes[Math.floor(Math.random() * actionTypes.length)];
@@ -126,6 +133,7 @@ function generateMockData(): RecommendationData {
         switch (actionType) {
             case "dahai": {
                 rec.action = tehai[Math.floor(Math.random() * tehai.length)];
+                rec.tile = rec.action;
                 break;
             }
             case "chi_low":
@@ -143,12 +151,15 @@ function generateMockData(): RecommendationData {
                 if (actionType === 'chi_low') { // eat t3 with t1, t2
                     last_kawa_tile = t3;
                     rec.consumed = [t1, t2];
+                    rec.tile = t3;
                 } else if (actionType === 'chi_mid') { // eat t2 with t1, t3
                     last_kawa_tile = t2;
                     rec.consumed = [t1, t3];
+                    rec.tile = t2;
                 } else { // chi_high, eat t1 with t2, t3
                     last_kawa_tile = t1;
                     rec.consumed = [t2, t3];
+                    rec.tile = t1;
                 }
                 break;
             }
@@ -157,35 +168,52 @@ function generateMockData(): RecommendationData {
                 const ponTile = getRandomTile([], nonRedDoraTiles);
                 last_kawa_tile = ponTile;
                 rec.consumed = [ponTile, ponTile];
+                rec.tile = ponTile;
                 break;
             }
             case "kan_select": {
                 rec.action = "kan_select";
                 const kanTile = getRandomTile([], nonRedDoraTiles);
                 rec.consumed = [kanTile, kanTile, kanTile];
+                rec.tile = kanTile;
+                last_kawa_tile = kanTile;
                 break;
             }
             case "reach": {
                 rec.action = "reach";
+                rec.tile = tehai[Math.floor(Math.random() * tehai.length)];
                 break;
             }
             case "none": {
                 rec.action = "none";
+                rec.tile = "?";
                 break;
             }
             default: {
                 rec.action = getRandomTile();
+                rec.tile = rec.action;
             }
         }
         recommendations.push(rec);
     }
 
-    return {
-        type: "recommandations",
-        data: {
-            recommendations: recommendations.sort((a, b) => b.confidence - a.confidence),
-            tehai: tehai,
-            last_kawa_tile: last_kawa_tile
+    const sortedRecommendations = recommendations.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+    const topRecommendation = sortedRecommendations[0];
+
+    const best_action: BestAction | null = topRecommendation
+        ? {
+            type: topRecommendation.action,
+            pai: topRecommendation.tile || topRecommendation.action,
+            consumed: topRecommendation.consumed,
+            tsumogiri: false,
+            actor: 0
         }
+        : null;
+
+    return {
+        recommendations: sortedRecommendations,
+        tehai: tehai,
+        last_kawa_tile: last_kawa_tile,
+        best_action
     };
 }

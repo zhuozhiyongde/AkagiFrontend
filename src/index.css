@@ -4,7 +4,7 @@
 
 .rotated-tile {
     transform: rotate(90deg);
-    width: 80px;  /* height of a normal tile */
+    width: 80px; /* height of a normal tile */
     height: 56px; /* width of a normal tile */
     position: absolute;
     top: 50%;
@@ -14,10 +14,8 @@
     margin-left: -40px; /* -width/2 */
 }
 
-
-
 @layer base {
-  :root {
+    :root {
         --background: 0 0% 100%;
         --foreground: 240 10% 3.9%;
         --card: 0 0% 100%;
@@ -39,7 +37,7 @@
         --ring: 240 10% 3.9%;
         --radius: 0.5rem;
     }
-  .dark {
+    .dark {
         --background: 240 10% 3.9%;
         --foreground: 0 0% 98%;
         --card: 240 10% 3.9%;
@@ -62,13 +60,15 @@
     }
 }
 
-
-
 @layer base {
-  * {
-    @apply border-border;
+    * {
+        @apply border-border;
     }
-  body {
-    @apply bg-background text-foreground;
+    body {
+        @apply bg-background text-foreground;
     }
+}
+
+img {
+    display: initial;
 }

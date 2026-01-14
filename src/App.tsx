@@ -22,40 +22,103 @@ declare global {
 
 interface Recommendation {
     action: string;
-    confidence: number;
+    confidence?: number;
     consumed?: string[];
+    tile?: string;
+}
+
+interface BestAction {
+    type: string;
+    pai?: string;
+    consumed?: string[];
+    tsumogiri?: boolean;
+    actor?: number;
 }
 
 interface FullRecommendationData {
-    recommendations: Recommendation[];
-    tehai: string[];
-    last_kawa_tile: string;
+    recommendations?: Recommendation[] | null;
+    tehai?: string[];
+    last_kawa_tile?: string | null;
+    best_action?: BestAction | null;
 }
+
+type ShutdownMessage = { type: 'shutdown' };
+type BackendMessage = FullRecommendationData | ShutdownMessage;
+
+const isShutdownMessage = (msg: BackendMessage): msg is ShutdownMessage =>
+    'type' in msg && msg.type === 'shutdown';
+
+const isDataMessage = (msg: BackendMessage): msg is FullRecommendationData => !('type' in msg);
+
+// 将 best_action 转换为 Recommendation 格式
+const bestActionToRecommendation = (bestAction: BestAction): Recommendation | null => {
+    if (!bestAction || bestAction.type === 'none') return null;
+
+    const actionTypeMapping: { [key: string]: string } = {
+        dahai: bestAction.pai || '?', // 打牌动作用牌名作为 action
+        reach: 'reach',
+        chi: 'chi_low', // chi 会根据 consumed 自动处理
+        pon: 'pon',
+        daiminkan: 'kan_select',
+        kakan: 'kan_select',
+        ankan: 'kan_select',
+        hora: 'hora',
+        ryukyoku: 'ryukyoku',
+        nukidora: 'nukidora',
+        none: 'none',
+    };
+
+    const action = actionTypeMapping[bestAction.type] || bestAction.pai || bestAction.type;
+
+    return {
+        action,
+        confidence: 1.0, // best_action 没有置信度，显示为 100%
+        tile: bestAction.pai || undefined,
+        consumed: bestAction.consumed || undefined,
+    };
+};
 
 const StreamRenderComponent = ({ data, theme }: { data: FullRecommendationData | null; theme: string }) => {
     const themeClass = theme === 'dark' ? 'dark' : '';
-    if (!data) {
+    const rawRecommendations = Array.isArray(data?.recommendations) ? data?.recommendations : [];
+    const lastKawaTile = data?.last_kawa_tile ?? null;
+
+    // 如果没有 recommendations，尝试回退到 best_action
+    let recommendations = rawRecommendations;
+    let isFallback = false;
+
+    if (recommendations.length === 0 && data?.best_action && data.best_action.type !== 'none') {
+        const fallbackRec = bestActionToRecommendation(data.best_action);
+        if (fallbackRec) {
+            recommendations = [fallbackRec];
+            isFallback = true;
+        }
+    }
+
+    if (!data || recommendations.length === 0) {
         return (
             <div
                 id="render-source"
                 className={`p-8 bg-white dark:bg-zinc-800 text-black dark:text-white flex items-center justify-center ${themeClass}`}
                 style={{ width: 1200, height: 675 }}>
-                <h2 className="text-4xl font-bold">Waiting for data...</h2>
+                <h2 className="text-4xl font-bold">
+                    {data ? 'No recommendations available yet...' : 'Waiting for data...'}
+                </h2>
             </div>
         );
     }
-
-    const { recommendations, last_kawa_tile } = data;
 
     return (
         <div
             id="render-source"
             className={`p-8 bg-white dark:bg-zinc-800 text-black dark:text-white mb-4 flex flex-col ${themeClass}`}
             style={{ width: 1200, height: 675 }}>
-            <h2 className="text-4xl font-bold mb-4 flex-shrink-0">Mortal Recommendations</h2>
+            <h2 className="text-4xl font-bold mb-4 flex-shrink-0">
+                {isFallback ? 'Best Action' : 'Recommendations'}
+            </h2>
             <div className="flex flex-col gap-4">
                 {recommendations.slice(0, 3).map((rec, index) => (
-                    <StreamRecommendation key={index + rec.action} {...rec} last_kawa_tile={last_kawa_tile} />
+                    <StreamRecommendation key={index + rec.action} {...rec} last_kawa_tile={lastKawaTile} />
                 ))}
             </div>
         </div>
@@ -67,55 +130,75 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const renderingRef = useRef<boolean>(false);
+    const renderSignatureRef = useRef<string | null>(null);
     const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
+
+    const CANVAS_WIDTH = 960;
+    const CANVAS_HEIGHT = 540;
+    const RENDER_SCALE = 0.9;
 
     useEffect(() => {
         const canvas = canvasRef.current;
         const renderSource = document.getElementById('render-source-pip');
+        let cancelled = false;
 
         // 获取或创建 canvas context（只创建一次）
         if (canvas && !ctxRef.current) {
             ctxRef.current = canvas.getContext('2d', { willReadFrequently: true });
         }
 
+        // 彻底清理 canvas 资源
+        function cleanupTempCanvas() {
+            if (tempCanvasRef.current) {
+                const oldCtx = tempCanvasRef.current.getContext('2d');
+                if (oldCtx) {
+                    oldCtx.clearRect(0, 0, tempCanvasRef.current.width, tempCanvasRef.current.height);
+                }
+                // 设置为 0 触发浏览器释放显存
+                tempCanvasRef.current.width = 0;
+                tempCanvasRef.current.height = 0;
+                tempCanvasRef.current = null;
+            }
+        }
+
         async function drawToCanvas() {
             if (!canvas || !renderSource || !ctxRef.current) return;
-            
+            if (renderingRef.current) return; // 防止并发的 html2canvas 占用爆炸
+
+            renderingRef.current = true;
+
             try {
                 // 清理之前的 tempCanvas
-                if (tempCanvasRef.current) {
-                    const oldCtx = tempCanvasRef.current.getContext('2d');
-                    if (oldCtx) {
-                        oldCtx.clearRect(0, 0, tempCanvasRef.current.width, tempCanvasRef.current.height);
-                    }
-                    tempCanvasRef.current = null;
-                }
+                cleanupTempCanvas();
 
                 const tempCanvas = await html2canvas(renderSource as HTMLElement, {
                     useCORS: true,
                     allowTaint: false,
                     backgroundColor: null,
-                    scale: 1,
+                    scale: RENDER_SCALE,
+                    removeContainer: true,
+                    foreignObjectRendering: false,
                     logging: false,
                     width: renderSource.offsetWidth,
                     height: renderSource.offsetHeight,
                     scrollX: -window.scrollX,
                     scrollY: -window.scrollY,
                 });
-                
+
                 // 保存引用以便后续清理
                 tempCanvasRef.current = tempCanvas;
-                
+
                 const ctx = ctxRef.current;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, 1200, 675);
-                
+                ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
                 // 内存监控 (仅在支持的浏览器中)
                 if (performance.memory) {
                     const memInfo = performance.memory;
                     const usedMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
                     const limitMB = Math.round(memInfo.jsHeapSizeLimit / 1024 / 1024);
-                    
+
                     // 当内存使用超过限制的80%时发出警告
                     if (usedMB / limitMB > 0.8) {
                         setMemoryWarning(`内存使用过高: ${usedMB}MB/${limitMB}MB`);
@@ -124,29 +207,41 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
                         setMemoryWarning(null);
                     }
                 }
-                
+
             } catch (err) {
                 console.error('html2canvas failed:', err);
                 setMemoryWarning('渲染失败，可能由于内存不足');
-                
+
                 // 强制触发垃圾回收（在支持的浏览器中）
                 if (window.gc) {
                     window.gc();
                 }
+            } finally {
+                renderingRef.current = false;
+                // 进一步促使释放位图内存
+                if (tempCanvasRef.current) {
+                    tempCanvasRef.current.width = 1;
+                    tempCanvasRef.current.height = 1;
+                }
             }
         }
 
-        drawToCanvas();
-        
+        const signature = JSON.stringify({
+            theme,
+            recs: data?.recommendations,
+            best: data?.best_action,
+            last: data?.last_kawa_tile,
+        });
+
+        if (renderSignatureRef.current !== signature) {
+            renderSignatureRef.current = signature;
+            drawToCanvas();
+        }
+
         // 清理函数
         return () => {
-            if (tempCanvasRef.current) {
-                const oldCtx = tempCanvasRef.current.getContext('2d');
-                if (oldCtx) {
-                    oldCtx.clearRect(0, 0, tempCanvasRef.current.width, tempCanvasRef.current.height);
-                }
-                tempCanvasRef.current = null;
-            }
+            cleanupTempCanvas();
+            cancelled = true;
         };
     }, [data, theme]);
 
@@ -254,7 +349,7 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
                     <StreamRenderComponent data={data} theme={theme} />
                 </div>
             </div>
-            <canvas ref={canvasRef} width="1200" height="675" className="hidden" />
+            <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
             <div className="w-full mt-4">
                 <video
                     ref={videoRef}
@@ -289,7 +384,7 @@ function App() {
         }
         return 'http';
     });
-    const [backendAddress, setBackendAddress] = useState(() => localStorage.getItem('backendAddress') || '127.0.0.1:8765');
+    const [backendAddress, setBackendAddress] = useState(() => localStorage.getItem('backendAddress') || '127.0.0.1:7881');
     const [clientId] = useState(() => {
         let id = localStorage.getItem('clientId');
         if (!id) {
@@ -390,9 +485,45 @@ function App() {
 
             es.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data) {
-                        setFullRecData(data.data);
+                    const data = JSON.parse(event.data) as BackendMessage;
+                    if (data && typeof data === 'object') {
+                        if (isShutdownMessage(data)) {
+                            setError('DataServer 已关闭');
+                            setIsConnected(false);
+                            setFullRecData(null);
+                            es.close();
+                            return;
+                        }
+
+                        if (isDataMessage(data)) {
+                            setFullRecData((prev) => {
+                                const incomingRecs = Array.isArray(data.recommendations) ? data.recommendations : null;
+                                const hasNewRecs = !!incomingRecs?.length;
+
+                                const incomingBest =
+                                    data.best_action && data.best_action.type !== 'none' ? data.best_action : null;
+
+                                // 当有新推荐时，同步更新 recommendations 和 last_kawa_tile
+                                // 当没有新推荐时，同时保留旧的 recommendations 和对应的 last_kawa_tile
+                                const nextRecommendations = hasNewRecs ? incomingRecs : prev?.recommendations ?? null;
+                                const nextLastKawa = hasNewRecs
+                                    ? (data.last_kawa_tile ?? null)
+                                    : (prev?.last_kawa_tile ?? null);
+
+                                // best_action 同理：有新的有效 best_action 时更新，否则保留
+                                const nextBestAction = incomingBest ?? prev?.best_action ?? null;
+
+                                const nextTehai = data.tehai ?? prev?.tehai;
+
+                                return {
+                                    recommendations: nextRecommendations,
+                                    best_action: nextBestAction,
+                                    last_kawa_tile: nextLastKawa,
+                                    tehai: nextTehai,
+                                };
+                            });
+                            setError(null);
+                        }
                     }
                 } catch (error) {
                     console.error('Failed to parse SSE message:', error);

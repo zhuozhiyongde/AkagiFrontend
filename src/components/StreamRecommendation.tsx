@@ -1,22 +1,41 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface RecommendationProps {
     action: string;
-    confidence: number;
+    confidence?: number;
     consumed?: string[];
-    last_kawa_tile: string;
+    last_kawa_tile?: string | null;
+    tile?: string;
 }
 
-const Tile: React.FC<{ tile: string }> = ({ tile }) => {
+const Tile: React.FC<{ tile?: string | null }> = ({ tile }) => {
+    const [failed, setFailed] = useState(false);
+
+    // 无效牌直接不渲染
+    if (!tile || tile === '?') {
+        return null;
+    }
+
     const svgPath = `/Resources/${tile}.svg`;
+
+    if (failed) {
+        // 加载失败时也不渲染
+        return null;
+    }
+
     return (
-        <div className="flex items-center justify-center relative w-20 h-fit">
-            <img src={svgPath} alt={tile} className="absolute bg-white rounded-md border-2 border-zinc-300 dark:border-zinc-700" />
+        <div className="flex items-center justify-center relative w-20 h-28">
+            <img
+                src={svgPath}
+                alt={tile}
+                onError={() => setFailed(true)}
+                className="bg-white rounded-md border-2 border-zinc-300 dark:border-zinc-700 object-contain w-full h-full"
+            />
         </div>
     );
 };
 
-const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_tile: string }> = ({
+const ConsumedDisplay: React.FC<{ action: string; consumed?: string[]; last_kawa_tile?: string | null }> = ({
     action,
     consumed,
     last_kawa_tile,
@@ -33,11 +52,18 @@ const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_
 
     const handTiles = [...consumed].sort((a, b) => getTileValue(a) - getTileValue(b));
 
+    // 判断 last_kawa_tile 是否有效
+    const hasValidLastKawa = last_kawa_tile && last_kawa_tile !== '?';
+
     if (action.startsWith('chi') || action === 'pon' || action === 'kan_select') {
         tilesToShow = (
             <>
-                <Tile tile={last_kawa_tile} />
-                <div className="w-1 h-16 bg-zinc-400 dark:bg-zinc-600 mx-1"></div>
+                {hasValidLastKawa && (
+                    <>
+                        <Tile tile={last_kawa_tile} />
+                        <div className="w-1 h-16 bg-zinc-400 dark:bg-zinc-600 mx-1"></div>
+                    </>
+                )}
                 {handTiles.map((t, i) => (
                     <Tile key={i} tile={t} />
                 ))}
@@ -50,7 +76,7 @@ const ConsumedDisplay: React.FC<{ action: string; consumed: string[]; last_kawa_
     return <div className="flex items-center space-x-2">{tilesToShow}</div>;
 };
 
-const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, consumed, last_kawa_tile }) => {
+const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, consumed, last_kawa_tile, tile }) => {
     const actionNameMapping: { [key: string]: string } = {
         reach: '立直',
         chi_low: '吃',
@@ -77,10 +103,15 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
         none: '#a0a0a0',
     };
 
-    const displayAction = actionNameMapping[action] || '打';
-    const tile = actionNameMapping[action] ? null : action;
     const showConsumed = consumed && ['chi_low', 'chi_mid', 'chi_high', 'pon', 'kan_select'].includes(action);
+    const displayAction = actionNameMapping[action] || '打';
+
+    const shouldShowTile =
+        !showConsumed && !['none', 'hora', 'ryukyoku', 'nukidora'].includes(action);
+    const tileToShow = shouldShowTile ? tile || (actionNameMapping[action] ? null : action) : null;
+
     const actionColor = colorMapping[action];
+    const confidenceText = typeof confidence === 'number' ? `${(confidence * 100).toFixed(2)}%` : '--';
 
     return (
         <div
@@ -95,14 +126,14 @@ const Recommendation: React.FC<RecommendationProps> = ({ action, confidence, con
             </div>
 
             <div className="flex-grow flex items-center justify-center mx-6">
-                {tile && <Tile tile={tile} />}
+                {tileToShow && <Tile tile={tileToShow} />}
                 {showConsumed && consumed && (
                     <ConsumedDisplay action={action} consumed={consumed} last_kawa_tile={last_kawa_tile} />
                 )}
             </div>
 
             <div className="w-48 text-right font-mono text-cyan-400" style={{ fontSize: '48px' }}>
-                {(confidence * 100).toFixed(2)}%
+                {confidenceText}
             </div>
         </div>
     );
