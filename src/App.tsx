@@ -141,7 +141,6 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
     useEffect(() => {
         const canvas = canvasRef.current;
         const renderSource = document.getElementById('render-source-pip');
-        let cancelled = false;
 
         // 获取或创建 canvas context（只创建一次）
         if (canvas && !ctxRef.current) {
@@ -241,7 +240,6 @@ const StreamPlayer = ({ data, theme }: { data: FullRecommendationData | null; th
         // 清理函数
         return () => {
             cleanupTempCanvas();
-            cancelled = true;
         };
     }, [data, theme]);
 
